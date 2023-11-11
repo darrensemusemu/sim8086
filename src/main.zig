@@ -8,6 +8,7 @@ const Args = struct {
     fn parse(alloc: std.mem.Allocator) !Args {
         var argsIter = try std.process.argsWithAllocator(alloc);
         defer argsIter.deinit();
+
         _ = argsIter.skip();
         const file_path = argsIter.next() orelse return error.FileNameMissing;
         return Args{ .file_path = file_path };
@@ -18,14 +19,13 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(gpa.deinit() == .ok);
     const alloc = gpa.allocator();
+
     const args = try Args.parse(alloc);
-    try run(alloc, args);
+    try run(args);
 }
 
-fn run(alloc: std.mem.Allocator, args: Args) !void {
+fn run(args: Args) !void {
     const file = try std.fs.cwd().openFile(args.file_path, .{});
-    var string = std.ArrayList(u8).init(alloc);
-    defer string.deinit();
 
     var buffered_writer = std.io.bufferedWriter(std.io.getStdOut().writer());
     var writer = buffered_writer.writer();
