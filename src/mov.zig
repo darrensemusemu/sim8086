@@ -32,7 +32,7 @@ pub const RegisterRegister = packed struct {
             },
         }
 
-        try writer.print("mov {s} {s}\n", .{ dst, src });
+        try writer.print("mov {s}, {s}\n", .{ dst, src });
     }
 };
 

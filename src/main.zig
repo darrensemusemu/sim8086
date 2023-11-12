@@ -4,31 +4,48 @@ const instruction = @import("instruction.zig");
 const mov = @import("mov.zig");
 
 const Args = struct {
-    file_path: []const u8,
+    action: enum { help, decode },
+    file_path: ?[]const u8 = null,
+    file_path2: ?[]const u8 = null,
 
     fn parse() !Args {
         var argsIter = std.process.args();
         defer argsIter.deinit();
 
-        _ = argsIter.skip();
-        const file_path = argsIter.next() orelse return error.FileNameMissing;
-        return Args{ .file_path = file_path };
+        _ = argsIter.skip(); // prog name
+
+        const action = argsIter.next() orelse return error.ArgActionMissing;
+        var args = Args{ .action = .help, .file_path = null };
+        if (std.mem.eql(u8, action, "decode")) {
+            args.action = .decode;
+            args.file_path = argsIter.next() orelse return error.FileNameMissing;
+        }
+        return args;
     }
 };
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
-
     const args = try Args.parse();
-    try decode(args);
+
+    var std_out = std.io.getStdOut();
+    var buffered_writer = std.io.bufferedWriter(std_out.writer());
+
+    switch (args.action) {
+        .decode => {
+            var writer = buffered_writer.writer();
+            try decode(writer, args);
+            try buffered_writer.flush();
+        },
+        .help => {
+            std.debug.print("TODO: help :)\n", .{});
+        },
+    }
 }
 
-fn decode(args: Args) !void {
-    const file = try std.fs.cwd().openFile(args.file_path, .{});
+fn decode(writer: anytype, args: Args) !void {
+    const file = try std.fs.cwd().openFile(args.file_path.?, .{});
 
-    var buffered_writer = std.io.bufferedWriter(std.io.getStdOut().writer());
-    var writer = buffered_writer.writer();
+    try writer.writeAll("bits 16\n");
 
     while (file.reader().readBytesNoEof(2)) |bytes| {
         if (mov.RegisterRegister.isOpCode(bytes[0])) {
@@ -38,6 +55,4 @@ fn decode(args: Args) !void {
     } else |err| {
         if (err != error.EndOfStream) return err;
     }
-
-    try buffered_writer.flush();
 }
