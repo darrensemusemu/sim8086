@@ -1,12 +1,13 @@
 const std = @import("std");
 
-const MOV = @import("MOV.zig");
+const instruction = @import("instruction.zig");
+const mov = @import("mov.zig");
 
 const Args = struct {
     file_path: []const u8,
 
-    fn parse(alloc: std.mem.Allocator) !Args {
-        var argsIter = try std.process.argsWithAllocator(alloc);
+    fn parse() !Args {
+        var argsIter = std.process.args();
         defer argsIter.deinit();
 
         _ = argsIter.skip();
@@ -18,22 +19,22 @@ const Args = struct {
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(gpa.deinit() == .ok);
-    const alloc = gpa.allocator();
 
-    const args = try Args.parse(alloc);
-    try run(args);
+    const args = try Args.parse();
+    try decode(args);
 }
 
-fn run(args: Args) !void {
+fn decode(args: Args) !void {
     const file = try std.fs.cwd().openFile(args.file_path, .{});
 
     var buffered_writer = std.io.bufferedWriter(std.io.getStdOut().writer());
     var writer = buffered_writer.writer();
 
-    while (file.reader().readBytesNoEof(2)) |buf| {
-        if (MOV.isMOV(buf[0])) {
-            try MOV.decode(writer, buf);
-        }
+    while (file.reader().readBytesNoEof(2)) |bytes| {
+        if (mov.RegisterRegister.isOpCode(bytes[0])) {
+            var inst = instruction.MovRegisterRegister.init(bytes);
+            try inst.key_data.decode(writer);
+        } else return error.AA;
     } else |err| {
         if (err != error.EndOfStream) return err;
     }
