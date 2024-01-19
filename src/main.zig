@@ -51,6 +51,8 @@ fn decode(writer: anytype, args: Args) !void {
     while (reader.readByte()) |byte| {
         if (mov.RegisterMemory.isOpCode(byte)) {
             try mov.RegisterMemory.decode(byte, reader, writer);
+        } else if (mov.ImmediateToRegister.isOpCode(byte)) {
+            try mov.ImmediateToRegister.decode(byte, reader, writer);
         } else return error.AA;
     } else |err| {
         if (err != error.EndOfStream) return err;
