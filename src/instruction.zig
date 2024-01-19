@@ -1,7 +1,7 @@
 const std = @import("std");
 const mov = @import("mov.zig");
 
-pub const MovRegisterRegister = Instruction(mov.RegisterRegister);
+pub const MovRegisterMemory = Instruction(mov.RegisterMemory);
 
 pub fn Instruction(comptime T: type) type {
     return struct {

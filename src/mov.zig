@@ -2,7 +2,9 @@ const std = @import("std");
 
 const instruction = @import("instruction.zig");
 
-pub const RegisterRegister = packed struct {
+pub const RegisterMemory = packed struct {
+    disp_hi: u8 = 0,
+    disp_lo: u8 = 0,
     rm: u3,
     reg: u3,
     mod: u2,
@@ -16,23 +18,59 @@ pub const RegisterRegister = packed struct {
         return key_byte1 & 0b1111_1100 == op_code;
     }
 
-    pub fn decode(self: *RegisterRegister, writer: anytype) !void {
+    pub fn decode(first_byte: u8, reader: anytype, writer: anytype) !void {
+        const second_byte = try reader.readByte();
+
+        var y: u16 = @bitCast([2]u8{ second_byte, first_byte });
+        const self: *RegisterMemory = @alignCast(@ptrCast(&y));
+
         var src: []const u8 = undefined;
         var dst: []const u8 = undefined;
-        switch (self.mod) {
-            0b00, 0b01, 0b10 => return error.MODBitsUnimplemented,
-            0b11 => {
-                if (self.d == 1) {
-                    dst = regFiledEncoding(self.reg, self.w);
-                    src = rmFiledEncoding(self.rm, self.mod, self.w);
-                } else {
-                    dst = rmFiledEncoding(self.rm, self.mod, self.w);
-                    src = regFiledEncoding(self.reg, self.w);
-                }
-            },
+        var buf: [50]u8 = undefined;
+
+        var reg_value = self.regFiledEncoding(self.reg);
+        var rm_value = try self.rmFiledEncoding(&buf, reader);
+
+        if (self.d == 1) {
+            dst = reg_value;
+            src = rm_value;
+        } else {
+            dst = rm_value;
+            src = reg_value;
         }
 
         try writer.print("mov {s}, {s}\n", .{ dst, src });
+    }
+
+    fn regFiledEncoding(self: *RegisterMemory, reg_bits: u3) []const u8 {
+        if (self.w == 0) {
+            return regFieldEncodingMap[reg_bits][0];
+        }
+        return regFieldEncodingMap[reg_bits][1];
+    }
+
+    fn rmFiledEncoding(self: *RegisterMemory, buf: []u8, reader: anytype) ![]const u8 {
+        var effective_addr: []const u8 = undefined;
+        var disp: u16 = 0;
+        switch (self.mod) {
+            0b00 => {
+                effective_addr = rmFieldEncodingMap[self.rm];
+            },
+            0b01 => {
+                effective_addr = rmFieldEncodingMap[self.rm];
+                disp = @intCast(try reader.readByte());
+            },
+            0b10 => {
+                effective_addr = rmFieldEncodingMap[self.rm];
+                disp = @bitCast(try reader.readBytesNoEof(2));
+            },
+            0b11 => return self.regFiledEncoding(self.rm),
+        }
+
+        if (disp == 0) {
+            return try std.fmt.bufPrint(buf, "[{s}]", .{effective_addr});
+        }
+        return try std.fmt.bufPrint(buf, "[{s} + {d}]", .{ effective_addr, disp });
     }
 };
 
@@ -50,16 +88,13 @@ const regFieldEncodingMap = [_]struct {
     .{ "bh", "di" },
 };
 
-fn regFiledEncoding(reg_bits: u3, w_bit: u1) []const u8 {
-    if (w_bit == 0) {
-        return regFieldEncodingMap[reg_bits][0];
-    }
-    return regFieldEncodingMap[reg_bits][1];
-}
-
-fn rmFiledEncoding(rm_bits: u3, mod_bits: u2, w_bit: u1) []const u8 {
-    if (mod_bits != 0b11) {
-        std.debug.panic("rm addr calulations not implemented", .{});
-    }
-    return regFiledEncoding(rm_bits, w_bit);
-}
+var rmFieldEncodingMap = [8][:0]const u8{
+    "bx + si",
+    "bx + di",
+    "bp + si",
+    "bp + di",
+    "si",
+    "di",
+    "bp",
+    "bx",
+};

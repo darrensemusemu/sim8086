@@ -46,11 +46,11 @@ fn decode(writer: anytype, args: Args) !void {
     const file = try std.fs.cwd().openFile(args.file_path.?, .{});
 
     try writer.writeAll("bits 16\n");
+    var reader = file.reader();
 
-    while (file.reader().readBytesNoEof(2)) |bytes| {
-        if (mov.RegisterRegister.isOpCode(bytes[0])) {
-            var inst = instruction.MovRegisterRegister.init(bytes);
-            try inst.key_data.decode(writer);
+    while (reader.readByte()) |byte| {
+        if (mov.RegisterMemory.isOpCode(byte)) {
+            try mov.RegisterMemory.decode(byte, reader, writer);
         } else return error.AA;
     } else |err| {
         if (err != error.EndOfStream) return err;
