@@ -40,12 +40,11 @@ pub const ImmediateToRegister = packed struct {
 
     pub fn decode(key_byte1: u8, reader: anytype, writer: anytype) !void {
         const key_byte2 = try reader.readByte();
-        var inst: u8 = @bitCast(key_byte1);
-        const self: *ImmediateToRegister = @ptrCast(&inst);
+        const inst: *ImmediateToRegister = @ptrCast(@constCast(&key_byte1));
 
-        const dst = regFiledEncoding(self.w, self.reg);
+        const dst = regFiledEncoding(inst.w, inst.reg);
         var src: u16 = key_byte2;
-        if (self.w == 1) {
+        if (inst.w == 1) {
             const key_byte3 = try reader.readByte();
             src = @bitCast([_]u8{ key_byte2, key_byte3 });
         }
@@ -72,14 +71,14 @@ pub const RegisterMemory = packed struct {
 
     pub fn decode(first_byte: u8, reader: anytype, writer: anytype) !void {
         const second_byte = try reader.readByte();
-        var y: u16 = @bitCast([2]u8{ second_byte, first_byte });
-        const self: *RegisterMemory = @ptrCast(&y);
+        var inst_value: u16 = @bitCast([2]u8{ second_byte, first_byte });
+        const inst: *RegisterMemory = @ptrCast(&inst_value);
 
         var buf: [50]u8 = undefined;
-        var reg_value = regFiledEncoding(self.w, self.reg);
-        var rm_value = try self.rmFiledEncoding(&buf, reader);
+        var reg_value = regFiledEncoding(inst.w, inst.reg);
+        var rm_value = try inst.rmFiledEncoding(&buf, reader);
 
-        if (self.d == 1) {
+        if (inst.d == 1) {
             try writer.print("mov {s}, {s}\n", .{ reg_value, rm_value });
         } else {
             try writer.print("mov {s}, {s}\n", .{ rm_value, reg_value });
