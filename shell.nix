@@ -4,7 +4,7 @@
 
 pkgs.mkShell {
   buildInputs = [
-    pkgs.zig
+    pkgs.zig_0_11
     pkgs.nasm
   ];
 }

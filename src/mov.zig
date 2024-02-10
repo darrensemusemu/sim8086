@@ -2,28 +2,100 @@ const std = @import("std");
 
 const instruction = @import("instruction.zig");
 
-// pub const ImmediateToRegisterMemory = packed struct {
-//     // data: u8 = 0,
-//     // data: u8 = 0,
-//     rm: u3,
-//     _: u3 = 0,
-//     mod: u2,
-//     w: u1,
-//     op_code: u7,
-//
-//     pub const op_code: u4 = 0b1011;
-//
-//     pub fn isOpCode(key_byte1: u8) bool {
-//         std.debug.print(":b {b} \n", .{key_byte1});
-//         return key_byte1 >> 4 == op_code;
-//     }
-//
-//     pub fn decode(key_byte1: u8, reader: anytype, writer: anytype) !void {
-//         _ = key_byte1;
-//         _ = reader;
-//         _ = writer;
-//     }
-// };
+pub const AccumlatorToMemory = packed struct {
+    //addr_hi: u8,
+    //addr_lo: u8,
+    w: u1,
+    op_code: u7,
+
+    pub const op_code: u7 = 0b1010001;
+
+    pub fn isOpCode(key_byte1: u8) bool {
+        return key_byte1 >> 1 == op_code;
+    }
+
+    pub fn decode(key_byte1: u8, reader: anytype, writer: anytype) !void {
+        const inst: *const MemoryToAccumlator = @ptrCast(&key_byte1);
+
+        const src_byte: u8 = try reader.readByte();
+        var src_word: ?u16 = null;
+        if (inst.w == 1) {
+            src_word = @bitCast([_]u8{ src_byte, try reader.readByte() });
+        }
+
+        try writer.print("mov [{d}], ax\n", .{src_word orelse src_byte});
+    }
+};
+
+pub const MemoryToAccumlator = packed struct {
+    //addr_hi: u8,
+    //addr_lo: u8,
+    w: u1,
+    op_code: u7,
+
+    pub const op_code: u7 = 0b1010000;
+
+    pub fn isOpCode(key_byte1: u8) bool {
+        return key_byte1 >> 1 == op_code;
+    }
+
+    pub fn decode(key_byte1: u8, reader: anytype, writer: anytype) !void {
+        const inst: *const MemoryToAccumlator = @ptrCast(&key_byte1);
+
+        const src_byte: u8 = try reader.readByte();
+        var src_word: ?u16 = null;
+        if (inst.w == 1) {
+            src_word = @bitCast([_]u8{ src_byte, try reader.readByte() });
+        }
+
+        try writer.print("mov ax, [{d}]\n", .{src_word orelse src_byte});
+    }
+};
+
+pub const ImmediateToRegisterMemory = packed struct {
+    // data2: u8 = 0,
+    // data: u8 = 0,
+    // disp hi
+    // disp low
+    rm: u3,
+    _: u3 = 0,
+    mod: u2,
+    w: u1,
+    op_code: u7,
+
+    pub const op_code: u7 = 0b1100011;
+
+    pub fn isOpCode(key_byte1: u8) bool {
+        return key_byte1 >> 1 == op_code; // TODO: can do some along the lines of @bitSizeOf(@TypeOf(op_code))} - 8
+    }
+
+    pub fn decode(key_byte1: u8, reader: anytype, writer: anytype) !void {
+        const key_byte2 = try reader.readByte();
+
+        var inst_value: u16 = @bitCast([2]u8{ key_byte2, key_byte1 });
+        const inst: *ImmediateToRegisterMemory = @ptrCast(&inst_value);
+
+        var buf: [50]u8 = undefined;
+        const dst = try rmFiledEncoding(inst, &buf, reader);
+
+        var src_keyword: ?[]const u8 = null;
+        if (inst.mod != 0b11) { // is mem mod
+            src_keyword = if (inst.w == 1) "word" else "byte";
+        }
+
+        const src_byte: u8 = try reader.readByte();
+        var src_word: ?u16 = null;
+        if (inst.w == 1) {
+            src_word = @bitCast([_]u8{ src_byte, try reader.readByte() });
+        }
+
+        try writer.print("mov {s}, {?s} {d}\n", .{
+            dst,
+            src_keyword orelse "",
+            src_word orelse src_byte,
+        });
+    }
+};
 
 pub const ImmediateToRegister = packed struct {
     // data2: u8 = 0,
@@ -75,8 +147,8 @@ pub const RegisterMemory = packed struct {
         const inst: *RegisterMemory = @ptrCast(&inst_value);
 
         var buf: [50]u8 = undefined;
-        var reg_value = regFiledEncoding(inst.w, inst.reg);
-        var rm_value = try inst.rmFiledEncoding(&buf, reader);
+        const reg_value = regFiledEncoding(inst.w, inst.reg);
+        const rm_value = try rmFiledEncoding(inst, &buf, reader);
 
         if (inst.d == 1) {
             try writer.print("mov {s}, {s}\n", .{ reg_value, rm_value });
@@ -84,31 +156,33 @@ pub const RegisterMemory = packed struct {
             try writer.print("mov {s}, {s}\n", .{ rm_value, reg_value });
         }
     }
-
-    fn rmFiledEncoding(self: *RegisterMemory, buf: []u8, reader: anytype) ![]const u8 {
-        var effective_addr: []const u8 = undefined;
-        var disp: u16 = 0;
-        switch (self.mod) {
-            0b00 => {
-                effective_addr = rmFieldEncodingMap[self.rm];
-            },
-            0b01 => {
-                effective_addr = rmFieldEncodingMap[self.rm];
-                disp = @intCast(try reader.readByte());
-            },
-            0b10 => {
-                effective_addr = rmFieldEncodingMap[self.rm];
-                disp = @bitCast(try reader.readBytesNoEof(2));
-            },
-            0b11 => return regFiledEncoding(self.w, self.rm),
-        }
-
-        if (disp == 0) {
-            return try std.fmt.bufPrint(buf, "[{s}]", .{effective_addr});
-        }
-        return try std.fmt.bufPrint(buf, "[{s} + {d}]", .{ effective_addr, disp });
-    }
 };
+
+/// anytype  should have mod / rm / w bits set
+fn rmFiledEncoding(inst: anytype, buf: []u8, reader: anytype) ![]const u8 {
+    var effective_addr: []const u8 = undefined;
+    switch (inst.mod) {
+        0b00 => {
+            if (inst.rm == 0b110) {
+                const disp: i16 = @bitCast(try reader.readBytesNoEof(2));
+                return try std.fmt.bufPrint(buf, "[{d}]", .{disp});
+            }
+            effective_addr = rmFieldEncodingMap[inst.rm];
+            return try std.fmt.bufPrint(buf, "[{s}]", .{effective_addr});
+        },
+        0b01 => {
+            effective_addr = rmFieldEncodingMap[inst.rm];
+            const disp: i8 = @bitCast(try reader.readByte());
+            return try std.fmt.bufPrint(buf, "[{s} + {d}]", .{ effective_addr, disp });
+        },
+        0b10 => {
+            effective_addr = rmFieldEncodingMap[inst.rm];
+            const disp: i16 = @bitCast(try reader.readBytesNoEof(2));
+            return try std.fmt.bufPrint(buf, "[{s} + {d}]", .{ effective_addr, disp });
+        },
+        0b11 => return regFiledEncoding(inst.w, inst.rm),
+    }
+}
 
 fn regFiledEncoding(w_bit: u1, reg_bits: u3) []const u8 {
     if (w_bit == 0) {

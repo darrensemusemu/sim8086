@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const instruction = @import("instruction.zig");
 const mov = @import("mov.zig");
 
 const Args = struct {
@@ -32,15 +31,21 @@ pub fn main() !void {
 
     switch (args.action) {
         .decode => {
-            var writer = buffered_writer.writer();
+            const writer = buffered_writer.writer();
             try decode(writer, args);
             try buffered_writer.flush();
         },
-        .help => {
-            std.debug.print("TODO: help :)\n", .{});
-        },
+        .help => std.debug.print("TODO: help :)\n", .{}),
     }
 }
+
+const instructions = .{
+    mov.RegisterMemory,
+    mov.ImmediateToRegister,
+    mov.ImmediateToRegisterMemory,
+    mov.MemoryToAccumlator,
+    mov.AccumlatorToMemory,
+};
 
 fn decode(writer: anytype, args: Args) !void {
     const file = try std.fs.cwd().openFile(args.file_path.?, .{});
@@ -49,11 +54,11 @@ fn decode(writer: anytype, args: Args) !void {
     var reader = file.reader();
 
     while (reader.readByte()) |byte| {
-        if (mov.RegisterMemory.isOpCode(byte)) {
-            try mov.RegisterMemory.decode(byte, reader, writer);
-        } else if (mov.ImmediateToRegister.isOpCode(byte)) {
-            try mov.ImmediateToRegister.decode(byte, reader, writer);
-        } else return error.AA;
+        inline for (instructions) |inst| {
+            if (inst.isOpCode(byte)) {
+                try inst.decode(byte, reader, writer);
+            }
+        }
     } else |err| {
         if (err != error.EndOfStream) return err;
     }
