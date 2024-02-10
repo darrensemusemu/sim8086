@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const instruction = @import("instruction.zig");
-
 pub const AccumlatorToMemory = packed struct {
     //addr_hi: u8,
     //addr_lo: u8,
@@ -15,7 +13,7 @@ pub const AccumlatorToMemory = packed struct {
     }
 
     pub fn decode(key_byte1: u8, reader: anytype, writer: anytype) !void {
-        const inst: *const MemoryToAccumlator = @ptrCast(&key_byte1);
+        const inst: *const @This() = @ptrCast(&key_byte1);
 
         const src_byte: u8 = try reader.readByte();
         var src_word: ?u16 = null;
@@ -40,7 +38,7 @@ pub const MemoryToAccumlator = packed struct {
     }
 
     pub fn decode(key_byte1: u8, reader: anytype, writer: anytype) !void {
-        const inst: *const MemoryToAccumlator = @ptrCast(&key_byte1);
+        const inst: *const @This() = @ptrCast(&key_byte1);
 
         const src_byte: u8 = try reader.readByte();
         var src_word: ?u16 = null;
@@ -73,7 +71,7 @@ pub const ImmediateToRegisterMemory = packed struct {
         const key_byte2 = try reader.readByte();
 
         var inst_value: u16 = @bitCast([2]u8{ key_byte2, key_byte1 });
-        const inst: *ImmediateToRegisterMemory = @ptrCast(&inst_value);
+        const inst: *@This() = @ptrCast(&inst_value);
 
         var buf: [50]u8 = undefined;
         const dst = try rmFiledEncoding(inst, &buf, reader);
@@ -112,7 +110,7 @@ pub const ImmediateToRegister = packed struct {
 
     pub fn decode(key_byte1: u8, reader: anytype, writer: anytype) !void {
         const key_byte2 = try reader.readByte();
-        const inst: *ImmediateToRegister = @ptrCast(@constCast(&key_byte1));
+        const inst: *@This() = @ptrCast(@constCast(&key_byte1));
 
         const dst = regFiledEncoding(inst.w, inst.reg);
         var src: u16 = key_byte2;
@@ -144,7 +142,7 @@ pub const RegisterMemory = packed struct {
     pub fn decode(first_byte: u8, reader: anytype, writer: anytype) !void {
         const second_byte = try reader.readByte();
         var inst_value: u16 = @bitCast([2]u8{ second_byte, first_byte });
-        const inst: *RegisterMemory = @ptrCast(&inst_value);
+        const inst: *@This() = @ptrCast(&inst_value);
 
         var buf: [50]u8 = undefined;
         const reg_value = regFiledEncoding(inst.w, inst.reg);
